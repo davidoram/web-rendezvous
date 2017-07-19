@@ -6,6 +6,46 @@ A webapp that allows network apps to lock and then signal one another by syncron
 
 `go build`
 
+## Docker build
+
+
+Build a docker image:
+
+```
+# Compile inside a golang docker container
+docker run --rm \
+           -it \
+           -v "$GOPATH":/gopath \
+           -v "$(pwd)":/main \
+           -e "GOPATH=/gopath" \
+           -w /main golang:1.8.1 \
+           sh -c 'CGO_ENABLED=0 go build -a --installsuffix cgo --ldflags="-s" -o web-rendezvous'
+
+# Build the docker container with our binary
+docker build -t davidoram/web-rendezvous .
+```
+
+Push to dockerhub:
+
+```
+docker login
+```
+
+Find the image to push:
+
+```
+docker images
+REPOSITORY                                     TAG                 IMAGE ID            CREATED             SIZE
+davidoram/web-rendezvous                       latest              dff31f7cbd16        2 minutes ago       4.21MB
+...
+```
+
+Tag & push the image:
+
+```
+docker tag dff31f7cbd16 davidoram/web-rendezvous:<tag>
+docker push davidoram/web-rendezvous
+```
 
 ## Usage
 
