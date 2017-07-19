@@ -23,7 +23,7 @@ If you run:
 
   `curl -X GET --max-time 600   http://localhost:8080/abc`
 
-... and then in another session run:
+.. then this call will block, until you open another session and run:
 
   `curl -X PUT http://localhost:8080/abc`
 
