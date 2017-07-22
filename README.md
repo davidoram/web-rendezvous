@@ -9,17 +9,12 @@ A webapp that allows network apps to lock and then signal one another by syncron
 ## Docker build
 
 
-Build a docker image:
+Build a docker image [credit](http://blog.dimroc.com/2015/08/20/cross-compiled-go-with-docker/):
 
 ```
-# Compile inside a golang docker container
-docker run --rm \
-           -it \
-           -v "$GOPATH":/gopath \
-           -v "$(pwd)":/main \
-           -e "GOPATH=/gopath" \
-           -w /main golang:1.8.1 \
-           sh -c 'CGO_ENABLED=0 go build -a --installsuffix cgo --ldflags="-s" -o web-rendezvous'
+# Cross compile to Linux
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a --installsuffix cgo --ldflags="-s" -o web-rendezvous
+
 
 # Build the docker container with our binary
 docker build -t davidoram/web-rendezvous .
