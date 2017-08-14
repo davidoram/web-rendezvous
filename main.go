@@ -3,12 +3,15 @@ package main
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"html/template"
+	"log"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -16,8 +19,14 @@ import (
 
 var timeout float64
 var postgresURL string
+
+// Map of keys that have been 'marked' as existing
 var keys = make(map[string]bool)
+var keysLock = sync.RWMutex{}
+
+// Map of keys that we are waiting to be 'marked' currently, or waiting for and failed
 var waiting = make(map[string]bool)
+var waitingLock = sync.RWMutex{}
 
 // Check if a key exists.
 // key:  _postgres/dbname - Will check if database 'dbname' exists
@@ -73,18 +82,28 @@ func keyExists(key string) bool {
 		fmt.Printf("'%s' : host:port: '%s:%s' listening - OK\n", key, host, port)
 		return true
 	} else {
+		keysLock.RLock()
+		defer keysLock.RUnlock()
 		return keys[key]
 	}
 }
 
+func deleteFromWaiting(key string) {
+	waitingLock.Lock()
+	delete(waiting, key)
+	waitingLock.Unlock()
+}
+
 func waitFor(key string) bool {
+	waitingLock.Lock()
 	waiting[key] = true
+	waitingLock.Unlock()
 	fmt.Printf("'%s' : Waiting ...\n", key)
 	t := time.Now()
 	for {
 		if keyExists(key) {
 			fmt.Printf("'%s' : Waiting - OK\n", key)
-			delete(waiting, key)
+			deleteFromWaiting(key)
 			return true
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -97,37 +116,100 @@ func waitFor(key string) bool {
 
 func mark(key string) bool {
 	fmt.Printf("'%s' : Marked - OK\n", key)
+	deleteFromWaiting(key)
+	keysLock.Lock()
+	defer keysLock.Unlock()
 	keys[key] = true
 	return true
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
+type StandardResponse struct {
+	Ok    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+type RootResponse struct {
+	StandardResponse
+	WaitKeys   []string `json:"waiting_and_failed"`
+	MarkedKeys []string `json:"marked"`
+}
+
+func NewRootResponse() RootResponse {
+	r := new(RootResponse)
+	r.Ok = true
+	r.Error = ""
+	r.WaitKeys = make([]string, 0)
+	r.MarkedKeys = make([]string, 0)
+	return *r
+}
+
+func Handler(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Path
 	if strings.ToLower(r.Method) == "get" {
 		if key == "/" {
-			fmt.Fprintln(w, "web-rendezvous")
-			fmt.Fprintln(w, "\nCurrently waiting for + recently failed:")
+			response := NewRootResponse()
+			waitingLock.RLock()
 			for k := range waiting {
-				fmt.Fprintln(w, "\t", k)
+				response.WaitKeys = append(response.WaitKeys, k)
 			}
-			fmt.Fprintln(w, "Total :", len(waiting))
+			waitingLock.RUnlock()
+			keysLock.RLock()
+			for k := range keys {
+				response.MarkedKeys = append(response.MarkedKeys, k)
+			}
+			keysLock.RUnlock()
+			jResponse, err := json.Marshal(response)
+			if err != nil {
+				log.Fatalf("Cant marshall response: %v", response)
+			}
+			fmt.Fprint(w, string(jResponse))
 		} else if key == "/favicon.ico" {
 			w.WriteHeader(404)
 		} else {
 			if !waitFor(key) {
 				w.WriteHeader(404)
-				fmt.Fprintf(w, "Timeout : '%s'", key)
+				response := StandardResponse{Ok: false, Error: "Timeout"}
+				jResponse, err := json.Marshal(response)
+				if err != nil {
+					log.Fatalf("Cant marshall response: %v", response)
+				}
+				fmt.Fprint(w, string(jResponse))
 			} else {
 				w.WriteHeader(200)
-				fmt.Fprint(w, "OK")
+				response := StandardResponse{Ok: true}
+				jResponse, err := json.Marshal(response)
+				if err != nil {
+					log.Fatalf("Cant marshall response: %v", response)
+				}
+				fmt.Fprint(w, string(jResponse))
 			}
 		}
 	} else if strings.ToLower(r.Method) == "put" || strings.ToLower(r.Method) == "post" {
-		mark(key)
-		w.WriteHeader(200)
-		fmt.Fprint(w, "OK")
+		if strings.HasPrefix(key, "/_") {
+			w.WriteHeader(404)
+			response := StandardResponse{Ok: false, Error: "Keys starting with '_' are reserved"}
+			jResponse, err := json.Marshal(response)
+			if err != nil {
+				log.Fatalf("Cant marshall response: %v", response)
+			}
+			fmt.Fprint(w, string(jResponse))
+		} else {
+			mark(key)
+			w.WriteHeader(200)
+			response := StandardResponse{Ok: true}
+			jResponse, err := json.Marshal(response)
+			if err != nil {
+				log.Fatalf("Cant marshall response: %v", response)
+			}
+			fmt.Fprint(w, string(jResponse))
+		}
 	} else {
-		fmt.Fprintf(w, "I dont understand that HTTP method: '%s', try 'put', 'post' or 'get'", r.Method)
+		response := StandardResponse{Ok: false, Error: "I dont understand that HTTP method, try 'put', 'post' or 'get'"}
+		jResponse, err := json.Marshal(response)
+		if err != nil {
+			log.Fatalf("Cant marshall response: %v", response)
+		}
+		fmt.Fprint(w, string(jResponse))
 	}
 }
 
@@ -141,6 +223,6 @@ func main() {
 	fmt.Println("web-rendezvous")
 	fmt.Printf("GET will timeout after: %.0f seconds\n", timeout)
 	fmt.Printf("Listening on port: %s\n", port)
-	http.HandleFunc("/", handler)
+	http.HandleFunc("/", Handler)
 	http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 }
