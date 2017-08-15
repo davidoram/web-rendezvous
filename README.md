@@ -1,6 +1,6 @@
 # web-rendezvous
 
-A webapp that allows network apps to lock and then signal one another by syncronizing on an HTTP endpoint. You can co-ordinate the startup steps in a network of Docker containers, by adding a web-rendezvous command into the startup sequence of one container, that will block until another container has gotten to the correct point and issued its own web-rendezvous command. It also supports some generic commands that will wait for postgres db creation, and another that will block until a server is listening on a given port.
+A webapp that allows network apps to lock and then signal each other by syncronizing on an HTTP endpoint. It can be used to co-ordinate the startup steps in a network of Docker containers, by adding a web-rendezvous command into the startup sequence of one container, that will block until another container has gotten to the correct point and issued its own web-rendezvous command. It also supports some generic commands that will wait for postgres db creation, and another that will block until a server is listening on a given port.
 
 If you want to use this inside a Docker container, then that image will need to have a command line http client installed, eg: `curl`, or modern versions of `wget` or a programming environment that can be used to perfom an HTTP GET/PUT from the command line like `nodejs`
 
@@ -18,7 +18,7 @@ my_app:
       && curl -X get --silent --show-error "http://webrendezvous:8080/_port/memcached/11211" && bin/my_app/start
 ```
 
-You may be wondering how to ensure that the `web-rendezvous` service is running first?  Make all of the lowest level infrastructure type services (databases, distributed caches, message queueing software, etc) depend on web-rendezvous eg:
+You may be wondering how to ensure that the `web-rendezvous` service is running first?  Make all of the lowest level infrastructure type services (databases, distributed caches, message queueing software, etc) depend on `web-rendezvous` eg:
 
 ```yaml
 version: "3.1"
@@ -53,7 +53,13 @@ services:
 
 ## Build
 
-`go build`
+To build a binary:
+
+`go build -o web-rendezvous`
+
+To run the tests:
+
+`go test`
 
 ## Docker build
 

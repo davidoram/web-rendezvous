@@ -61,7 +61,7 @@ func keyExists(key string) bool {
 			return false
 		}
 		fmt.Printf("'%s' : postgres db '%s' created - OK\n", key, database)
-		return true
+		return mark(key)
 
 	} else if strings.HasPrefix(key, "/_port/") {
 		// Port connection?
@@ -80,7 +80,7 @@ func keyExists(key string) bool {
 		}
 		conn.Close()
 		fmt.Printf("'%s' : host:port: '%s:%s' listening - OK\n", key, host, port)
-		return true
+		return mark(key)
 	} else {
 		keysLock.RLock()
 		defer keysLock.RUnlock()

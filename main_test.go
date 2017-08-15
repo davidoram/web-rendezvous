@@ -7,8 +7,16 @@ import (
 	"testing"
 )
 
+func resetState() {
+	keysLock.Lock()
+	keys = make(map[string]bool)
+	keysLock.Unlock()
+	waitingLock.Lock()
+	waiting = make(map[string]bool)
+	waitingLock.Unlock()
+}
 func TestLockAndWait(t *testing.T) {
-
+	resetState()
 	timeout = 1.0
 
 	// Create a request to GET key 'abc'
@@ -102,6 +110,7 @@ func TestLockAndWait(t *testing.T) {
 }
 
 func TestInvalidRequests(t *testing.T) {
+	resetState()
 
 	// Create a request to POST key '_abc'
 	postReq, err := http.NewRequest("POST", "/_abc", nil)
@@ -120,6 +129,170 @@ func TestInvalidRequests(t *testing.T) {
 	if postResponse_1.Body.String() != expected {
 		t.Errorf("handler returned unexpected body: got %v want %v",
 			postResponse_1.Body.String(), expected)
+	}
+
+}
+
+func TestPostgresIntegration(t *testing.T) {
+
+	resetState()
+	// Setup connection details for postgres (running on travis)
+	postgresURL = "postgres://postgres:@localhost:5432/{{.}}?sslmode=disable"
+	timeout = 1.0
+
+	// Create a request to GET key '_postgres/my_db'
+	getReq_1, err := http.NewRequest("GET", "/_postgres/my_db", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a request to GET key '_postgres/no_such_db'
+	getReq_2, err := http.NewRequest("GET", "/_postgres/no_such_db", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a request to GET the status
+	statusReq, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Perform a GET to 'check' a db that exists
+	getResponse_1 := httptest.NewRecorder()
+	handler := http.HandlerFunc(Handler)
+	handler.ServeHTTP(getResponse_1, getReq_1)
+	if status := getResponse_1.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+	expected := `{"ok":true}`
+	if getResponse_1.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			getResponse_1.Body.String(), expected)
+	}
+
+	// Check the status is ok
+	statusResponse_1 := httptest.NewRecorder()
+	handler = http.HandlerFunc(Handler)
+	handler.ServeHTTP(statusResponse_1, statusReq)
+	if status := statusResponse_1.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+	expected = `{"ok":true,"waiting_and_failed":[],"marked":["/_postgres/my_db"]}`
+	if statusResponse_1.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			statusResponse_1.Body.String(), expected)
+	}
+
+	// Perform a GET to 'check' a db that doesn't exist
+	getResponse_2 := httptest.NewRecorder()
+	handler = http.HandlerFunc(Handler)
+	handler.ServeHTTP(getResponse_2, getReq_2)
+	if status := getResponse_2.Code; status != http.StatusNotFound {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusNotFound)
+	}
+	expected = `{"ok":false,"error":"Timeout"}`
+	if getResponse_2.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			getResponse_2.Body.String(), expected)
+	}
+
+	// Check the status is ok
+	statusResponse_1 = httptest.NewRecorder()
+	handler = http.HandlerFunc(Handler)
+	handler.ServeHTTP(statusResponse_1, statusReq)
+	if status := statusResponse_1.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+	expected = `{"ok":true,"waiting_and_failed":["/_postgres/no_such_db"],"marked":["/_postgres/my_db"]}`
+	if statusResponse_1.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			statusResponse_1.Body.String(), expected)
+	}
+
+}
+
+func TestServerListeningIntegration(t *testing.T) {
+
+	resetState()
+	timeout = 1.0
+
+	// Create a request to GET key '_port/localhost/11211' (memcached)
+	getReq_1, err := http.NewRequest("GET", "/_port/localhost/11211", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a request to GET key '_port/localhost/1' which wont be there
+	getReq_2, err := http.NewRequest("GET", "/_port/localhost/1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a request to GET the status
+	statusReq, err := http.NewRequest("GET", "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Perform a GET to 'check' a port that has a server on it
+	getResponse_1 := httptest.NewRecorder()
+	handler := http.HandlerFunc(Handler)
+	handler.ServeHTTP(getResponse_1, getReq_1)
+	if status := getResponse_1.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+	expected := `{"ok":true}`
+	if getResponse_1.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			getResponse_1.Body.String(), expected)
+	}
+
+	// Check the status is ok
+	statusResponse_1 := httptest.NewRecorder()
+	handler = http.HandlerFunc(Handler)
+	handler.ServeHTTP(statusResponse_1, statusReq)
+	if status := statusResponse_1.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+	expected = `{"ok":true,"waiting_and_failed":[],"marked":["/_port/localhost/11211"]}`
+	if statusResponse_1.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			statusResponse_1.Body.String(), expected)
+	}
+
+	// Perform a GET to 'check' a db that doesn't exist
+	getResponse_2 := httptest.NewRecorder()
+	handler = http.HandlerFunc(Handler)
+	handler.ServeHTTP(getResponse_2, getReq_2)
+	if status := getResponse_2.Code; status != http.StatusNotFound {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusNotFound)
+	}
+	expected = `{"ok":false,"error":"Timeout"}`
+	if getResponse_2.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			getResponse_2.Body.String(), expected)
+	}
+
+	// Check the status is ok
+	statusResponse_1 = httptest.NewRecorder()
+	handler = http.HandlerFunc(Handler)
+	handler.ServeHTTP(statusResponse_1, statusReq)
+	if status := statusResponse_1.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+	expected = `{"ok":true,"waiting_and_failed":["/_port/localhost/1"],"marked":["/_port/localhost/11211"]}`
+	if statusResponse_1.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			statusResponse_1.Body.String(), expected)
 	}
 
 }
