@@ -1,0 +1,9 @@
+language: go
+
+before_script:
+  - psql -c 'create database my_db;' -U postgres
+
+script:
+  - go test
+
+
