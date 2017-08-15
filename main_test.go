@@ -109,10 +109,11 @@ func TestLockAndWait(t *testing.T) {
 
 }
 
-func TestInvalidRequests(t *testing.T) {
+func TestInvalidRequestReservedUrl(t *testing.T) {
 	resetState()
+	timeout = 1.0
 
-	// Create a request to POST key '_abc'
+	// Create a request to POST key '_abc', a reserved URL because it starts with an _
 	postReq, err := http.NewRequest("POST", "/_abc", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +131,6 @@ func TestInvalidRequests(t *testing.T) {
 		t.Errorf("handler returned unexpected body: got %v want %v",
 			postResponse_1.Body.String(), expected)
 	}
-
 }
 
 func TestPostgresIntegration(t *testing.T) {
