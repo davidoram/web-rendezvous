@@ -1,5 +1,7 @@
 # web-rendezvous
 
+[![Build Status](https://travis-ci.org/davidoram/web-rendezvous.svg?branch=master)](https://travis-ci.org/davidoram/web-rendezvous)
+
 A webapp that allows network apps to lock and then signal each other by syncronizing on an HTTP endpoint. It can be used to co-ordinate the startup steps in a network of Docker containers, by adding a web-rendezvous command into the startup sequence of one container, that will block until another container has gotten to the correct point and issued its own web-rendezvous command. It also supports some generic commands that will wait for postgres db creation, and another that will block until a server is listening on a given port.
 
 The following diagram indicates how `Docker container 1` wants to call a service inside `Docker container 2`, but it doesn't know when that service is ready, so it issues a `GET` call to `web-rendezvous` that will block until `Docker container 2` issues the `PUT` call to indicate that it is ready to accept commands:
