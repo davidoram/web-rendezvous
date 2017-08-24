@@ -139,7 +139,8 @@ Usage of ./web-rendezvous:
   -postgresURL string
         Postgres URL of the form 'postgres://<username>:<password>@<host>:<port>/{{.}}[?<connection-string-params]'. {{.}} will be replaced with the db name (default "postgres://postgres:pgpass@postgres:5432/{{.}}?sslmode=disable")
   -timeout float
-        Timeout in seconds (default 30)```
+        Timeout in seconds (default 30)
+```
 
 ## Web interface
 
@@ -149,7 +150,7 @@ Open the homepage of web-rendezvous to see a list of keys that are currently wai
 
 If you run:
 
-    `curl -X GET --max-time 600   http://localhost:8080/abc`
+  `curl -X GET --max-time 600   http://localhost:8080/abc`
 
 .. then web-rendezvous will enter a loop, repeatedly attempting to see if another caller has `POST/PUT` variable `abc`.  If successful it will return 200, otherwise when the timeout period expires it will return 404.
 
