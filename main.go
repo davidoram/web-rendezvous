@@ -21,12 +21,10 @@ var timeout float64
 var postgresURL string
 
 // Map of keys that have been 'marked' as existing
-var keys = make(map[string]bool)
-var keysLock = sync.RWMutex{}
+var marked sync.Map
 
 // Map of keys that we are waiting to be 'marked' currently, or waiting for and failed
-var waiting = make(map[string]bool)
-var waitingLock = sync.RWMutex{}
+var waiting sync.Map
 
 // Check if a key exists.
 // key:  _postgres/dbname - Will check if database 'dbname' exists
@@ -82,28 +80,20 @@ func keyExists(key string) bool {
 		fmt.Printf("'%s' : host:port: '%s:%s' listening - OK\n", key, host, port)
 		return mark(key)
 	} else {
-		keysLock.RLock()
-		defer keysLock.RUnlock()
-		return keys[key]
+		_, ok := marked.Load(key)
+		return ok
 	}
 }
 
-func deleteFromWaiting(key string) {
-	waitingLock.Lock()
-	delete(waiting, key)
-	waitingLock.Unlock()
-}
-
 func waitFor(key string) bool {
-	waitingLock.Lock()
-	waiting[key] = true
-	waitingLock.Unlock()
+	waiting.Store(key, true)
 	fmt.Printf("'%s' : Waiting ...\n", key)
 	t := time.Now()
 	for {
 		if keyExists(key) {
-			fmt.Printf("'%s' : Waiting - OK\n", key)
-			deleteFromWaiting(key)
+			fmt.Printf("'%s' : Waiting - Released\n", key)
+			waiting.Delete(key)
+			fmt.Printf("'%s' : Waiting - Returning OK\n", key)
 			return true
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -116,10 +106,7 @@ func waitFor(key string) bool {
 
 func mark(key string) bool {
 	fmt.Printf("'%s' : Marked - OK\n", key)
-	deleteFromWaiting(key)
-	keysLock.Lock()
-	defer keysLock.Unlock()
-	keys[key] = true
+	marked.Store(key, true)
 	return true
 }
 
@@ -148,16 +135,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if strings.ToLower(r.Method) == "get" {
 		if key == "/" {
 			response := NewRootResponse()
-			waitingLock.RLock()
-			for k := range waiting {
-				response.WaitKeys = append(response.WaitKeys, k)
-			}
-			waitingLock.RUnlock()
-			keysLock.RLock()
-			for k := range keys {
-				response.MarkedKeys = append(response.MarkedKeys, k)
-			}
-			keysLock.RUnlock()
+			waiting.Range(func(k, v interface{}) bool {
+				response.WaitKeys = append(response.WaitKeys, k.(string))
+				return true
+			})
+			marked.Range(func(k, v interface{}) bool {
+				response.MarkedKeys = append(response.MarkedKeys, k.(string))
+				return true
+			})
 			jResponse, err := json.Marshal(response)
 			if err != nil {
 				log.Fatalf("Cant marshall response: %v", response)

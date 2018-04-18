@@ -8,12 +8,14 @@ import (
 )
 
 func resetState() {
-	keysLock.Lock()
-	keys = make(map[string]bool)
-	keysLock.Unlock()
-	waitingLock.Lock()
-	waiting = make(map[string]bool)
-	waitingLock.Unlock()
+	waiting.Range(func(k, v interface{}) bool {
+		waiting.Delete(k)
+		return true
+	})
+	marked.Range(func(k, v interface{}) bool {
+		marked.Delete(k)
+		return true
+	})
 }
 func TestLockAndWait(t *testing.T) {
 	resetState()

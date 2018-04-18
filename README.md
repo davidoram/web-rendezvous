@@ -84,6 +84,8 @@ services:
 
 ## Build
 
+Needs Go 1.9 or later
+
 To build a binary:
 
 `go build -o web-rendezvous`
